@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scorebord">
+<meta name="theme-color" content="#0f1720">
+<title>Scorebord</title>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#18222e; --panel2:#223041; --text:#eef3f8; --muted:#8b9bad;
+    --home:#2f80ed; --away:#e0563b; --ok:#27ae60; --warn:#f2994a; --alert:#f2c94c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    touch-action:manipulation; -webkit-user-select:none; user-select:none}
+  body{padding:max(12px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));
+    min-height:100vh; display:flex; flex-direction:column; gap:12px; max-width:520px; margin:0 auto}
+  header{display:flex; align-items:center; justify-content:space-between}
+  #phase{font-size:18px; font-weight:700; letter-spacing:.02em}
+  .icon-btn{background:var(--panel); border:0; color:var(--text); font-size:22px;
+    width:44px; height:44px; border-radius:12px}
+  .clock-wrap{background:var(--panel); border-radius:18px; padding:14px 12px 12px; text-align:center}
+  #clock{font-size:clamp(64px,22vw,104px); font-weight:800; font-variant-numeric:tabular-nums; line-height:1}
+  #clock.over{color:var(--warn)}
+  #clock.paused{opacity:.45}
+  #extra{font-size:24px; font-weight:700; color:var(--warn); min-height:28px; font-variant-numeric:tabular-nums}
+  #sub{color:var(--muted); font-size:15px; margin-top:2px}
+  #banner{display:none; margin-top:10px; padding:10px; border-radius:12px; font-weight:800;
+    font-size:18px; background:var(--alert); color:#1b1b1b}
+  #banner.show{display:block; animation:pulse 1s infinite alternate}
+  @keyframes pulse{from{opacity:1}to{opacity:.55}}
+  .scores{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .team{background:var(--panel); border-radius:18px; padding:12px; display:flex; flex-direction:column; align-items:center; gap:8px}
+  .team .name{font-size:16px; font-weight:700; text-align:center; min-height:20px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; max-width:100%}
+  .team .score{font-size:clamp(64px,20vw,96px); font-weight:800; line-height:1; font-variant-numeric:tabular-nums}
+  .plus{width:100%; height:72px; border:0; border-radius:14px; font-size:36px; font-weight:800; color:#fff}
+  .home .plus{background:var(--home)} .away .plus{background:var(--away)}
+  .home .name{color:#7fb2ff} .away .name{color:#ff9b85}
+  .minus{width:100%; height:40px; border:0; border-radius:10px; background:var(--panel2); color:var(--muted); font-size:22px}
+  .controls{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .btn{height:60px; border:0; border-radius:14px; font-size:18px; font-weight:700; color:#fff; background:var(--panel2)}
+  .btn.primary{background:var(--ok)}
+  .btn.wide{grid-column:1 / -1}
+  .btn.danger{background:#7a2e2e}
+  .btn[hidden]{display:none}
+  #log{background:var(--panel); border-radius:14px; padding:10px 14px; font-size:15px; color:var(--muted)}
+  #log:empty{display:none}
+  #log div{padding:3px 0; font-variant-numeric:tabular-nums}
+  #log b{color:var(--text)}
+  dialog{border:0; border-radius:18px; background:var(--panel); color:var(--text); width:min(92vw,440px); padding:18px}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog h2{margin:0 0 12px; font-size:20px}
+  label{display:block; margin:12px 0 4px; color:var(--muted); font-size:14px}
+  input[type=text],input[type=number]{width:100%; height:46px; border-radius:10px; border:1px solid #33465c;
+    background:var(--bg); color:var(--text); font-size:18px; padding:0 12px; -webkit-user-select:text; user-select:text}
+  .check{display:flex; align-items:center; gap:10px; margin-top:14px; color:var(--text); font-size:16px}
+  .check input{width:24px; height:24px}
+  .hint{color:var(--muted); font-size:13px; margin-top:6px}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:18px}
+</style>
+</head>
+<body>
+
+<header>
+  <div id="phase">Voor de wedstrijd</div>
+  <button class="icon-btn" id="openSettings" aria-label="Instellingen">⚙︎</button>
+</header>
+
+<section class="clock-wrap">
+  <div id="clock">00:00</div>
+  <div id="extra"></div>
+  <div id="sub"></div>
+  <div id="banner"></div>
+</section>
+
+<section class="scores">
+  <div class="team home">
+    <div class="name">Lycurgus</div>
+    <div class="score" id="homeScore">0</div>
+    <button class="plus" data-team="home">+1</button>
+    <button class="minus" data-team="home" aria-label="Doelpunt Lycurgus intrekken">−</button>
+  </div>
+  <div class="team away">
+    <div class="name" id="awayName">Tegenstander</div>
+    <div class="score" id="awayScore">0</div>
+    <button class="plus" data-team="away">+1</button>
+    <button class="minus" data-team="away" aria-label="Doelpunt tegenstander intrekken">−</button>
+  </div>
+</section>
+
+<section class="controls">
+  <button class="btn primary wide" id="mainBtn">Aftrap</button>
+  <button class="btn" id="pauseBtn" hidden>Pauze</button>
+  <button class="btn" id="endBtn" hidden>Einde helft</button>
+</section>
+
+<section id="log"></section>
+
+<dialog id="settings">
+  <h2>Instellingen</h2>
+  <label for="opp">Tegenstander</label>
+  <input type="text" id="opp" placeholder="bijv. Be Quick 1887 JO12-1" autocomplete="off">
+  <label for="dur">Speeltijd totaal (minuten)</label>
+  <input type="number" id="dur" min="1" max="120" inputmode="numeric">
+  <label for="per">Aantal speelperiodes</label>
+  <input type="number" id="per" min="1" max="4" inputmode="numeric">
+  <div class="hint">2 = twee helften met rust ertussen.</div>
+  <label class="check"><input type="checkbox" id="to"> Time-out halverwege elke periode</label>
+  <div class="row">
+    <button class="btn danger" id="resetBtn">Nieuwe wedstrijd</button>
+    <button class="btn primary" id="saveBtn">Opslaan</button>
+  </div>
+</dialog>
+
+<script>
+(function(){
+  const KEY = 'scorebord-lycurgus-v1';
+  const DEFAULT_CFG = { opponent:'Tegenstander', matchMin:60, periods:2, timeout:true };
+
+  function freshMatch(cfg){
+    return {
+      cfg: Object.assign({}, cfg),
+      phase: 'pre',        // pre | play | break | end
+      period: 1,
+      acc: 0,              // ms gespeeld in huidige periode tot laatste pauze
+      startedAt: null,     // tijdstempel als de klok loopt, anders null
+      breakStart: null,    // tijdstempel begin rust
+      home: 0, away: 0,
+      goals: [],           // {team, label}
+      toDone: {}           // per periode: time-out gehad
+    };
+  }
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(raw){ const s = JSON.parse(raw); if(s && s.cfg) return s; }
+    }catch(e){}
+    return freshMatch(DEFAULT_CFG);
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+  let S = load();
+
+  const $ = id => document.getElementById(id);
+  const periodMs = () => S.cfg.matchMin / S.cfg.periods * 60000;
+  const running = () => S.phase === 'play' && S.startedAt !== null;
+  const elapsed = () => S.acc + (S.startedAt !== null ? Date.now() - S.startedAt : 0);
+
+  function fmt(ms){
+    const t = Math.max(0, Math.floor(ms/1000));
+    const m = Math.floor(t/60), s = t%60;
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+  function periodName(p, n){
+    if(n === 2) return p === 1 ? '1e helft' : '2e helft';
+    if(n === 1) return 'Wedstrijd';
+    return p + 'e periode';
+  }
+  function breakName(){
+    return (S.cfg.periods === 2) ? 'Rust' : 'Pauze na ' + periodName(S.period, S.cfg.periods);
+  }
+  function goalMinute(){
+    const pm = S.cfg.matchMin / S.cfg.periods;
+    const e = elapsed();
+    const base = (S.period - 1) * pm;
+    if(S.phase !== 'play') return '';
+    const min = Math.floor(e/60000) + 1;
+    if(min > pm) return (base + pm) + '+' + (min - pm) + "'";
+    return (base + min) + "'";
+  }
+
+  function render(){
+    const n = S.cfg.periods;
+    $('awayName').textContent = S.cfg.opponent || 'Tegenstander';
+    $('homeScore').textContent = S.home;
+    $('awayScore').textContent = S.away;
+
+    const clock = $('clock'), extra = $('extra'), sub = $('sub'), banner = $('banner');
+    const main = $('mainBtn'), pause = $('pauseBtn'), end = $('endBtn');
+    clock.className = ''; extra.textContent = ''; banner.className = ''; banner.textContent = '';
+    pause.hidden = true; end.hidden = true; main.hidden = false;
+    main.className = 'btn primary wide';
+
+    const pMs = periodMs();
+    const toAt = pMs / 2;
+
+    if(S.phase === 'pre'){
+      $('phase').textContent = 'Voor de wedstrijd';
+      clock.textContent = '00:00';
+      sub.textContent = periodLine();
+      main.textContent = 'Aftrap ' + periodName(1, n);
+    }
+    else if(S.phase === 'play'){
+      const e = elapsed();
+      $('phase').textContent = periodName(S.period, n) + (running() ? '' : ' · gepauzeerd');
+      if(e >= pMs){
+        clock.textContent = fmt(pMs);
+        clock.classList.add('over');
+        extra.textContent = '+' + fmt(e - pMs);
+        banner.textContent = 'Speeltijd voorbij';
+        banner.classList.add('show');
+      } else {
+        clock.textContent = fmt(e);
+      }
+      if(!running()) clock.classList.add('paused');
+
+      // time-out
+      if(S.cfg.timeout && !S.toDone[S.period]){
+        if(e >= toAt && e < pMs){
+          banner.textContent = 'Time-out!';
+          banner.classList.add('show');
+        }
+        sub.textContent = 'van ' + fmt(pMs) + ' · time-out om ' + fmt(toAt);
+      } else {
+        sub.textContent = 'van ' + fmt(pMs) + (S.cfg.timeout ? ' · time-out gehad' : '');
+      }
+
+      main.hidden = true;
+      pause.hidden = false;
+      end.hidden = false;
+      pause.textContent = running() ? 'Pauze' : 'Hervat';
+      pause.className = running() ? 'btn' : 'btn primary';
+      end.textContent = S.period < n ? 'Einde ' + periodName(S.period, n) : 'Einde wedstrijd';
+      end.className = (e >= pMs) ? 'btn primary' : 'btn';
+    }
+    else if(S.phase === 'break'){
+      $('phase').textContent = breakName();
+      clock.textContent = fmt(Date.now() - (S.breakStart || Date.now()));
+      clock.classList.add('paused');
+      sub.textContent = 'duur van de pauze';
+      main.textContent = 'Aftrap ' + periodName(S.period + 1, n);
+    }
+    else if(S.phase === 'end'){
+      $('phase').textContent = 'Einde wedstrijd';
+      clock.textContent = S.home + ' – ' + S.away;
+      sub.textContent = 'Lycurgus – ' + (S.cfg.opponent || 'Tegenstander');
+      main.textContent = 'Nieuwe wedstrijd';
+      main.className = 'btn wide';
+    }
+
+    // doelpuntenlog
+    const log = $('log');
+    log.innerHTML = '';
+    let h = 0, a = 0;
+    S.goals.forEach(g => {
+      if(g.team === 'home') h++; else a++;
+      const d = document.createElement('div');
+      const who = g.team === 'home' ? 'Lycurgus' : (S.cfg.opponent || 'Tegenstander');
+      d.innerHTML = (g.label ? g.label + ' ' : '') + '<b>' + h + '–' + a + '</b> ' + escapeHtml(who);
+      log.appendChild(d);
+    });
+  }
+
+  function periodLine(){
+    const pm = S.cfg.matchMin / S.cfg.periods;
+    let t = S.cfg.periods + ' × ' + pm + ' min';
+    if(S.cfg.timeout) t += ' · time-out na ' + (pm/2) + ' min';
+    return t;
+  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // ---- acties ----
+  $('mainBtn').addEventListener('click', () => {
+    if(S.phase === 'pre'){
+      S.phase = 'play'; S.period = 1; S.acc = 0; S.startedAt = Date.now();
+    } else if(S.phase === 'break'){
+      S.phase = 'play'; S.period += 1; S.acc = 0; S.startedAt = Date.now(); S.breakStart = null;
+    } else if(S.phase === 'end'){
+      if(!confirm('Nieuwe wedstrijd starten? De huidige stand wordt gewist.')) return;
+      S = freshMatch(S.cfg);
+    }
+    save(); render();
+  });
+
+  $('pauseBtn').addEventListener('click', () => {
+    if(S.phase !== 'play') return;
+    if(running()){
+      S.acc = elapsed(); S.startedAt = null;
+      // pauze na het time-outmoment telt als de time-out
+      if(S.cfg.timeout && S.acc >= periodMs()/2) S.toDone[S.period] = true;
+    } else {
+      S.startedAt = Date.now();
+    }
+    save(); render();
+  });
+
+  $('endBtn').addEventListener('click', () => {
+    if(S.phase !== 'play') return;
+    const last = S.period >= S.cfg.periods;
+    const early = elapsed() < periodMs();
+    if(early && !confirm((last ? 'Wedstrijd' : periodName(S.period, S.cfg.periods)) + ' nu al beëindigen?')) return;
+    S.acc = elapsed(); S.startedAt = null;
+    if(last){ S.phase = 'end'; }
+    else { S.phase = 'break'; S.breakStart = Date.now(); }
+    save(); render();
+  });
+
+  document.querySelectorAll('.plus').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.team;
+    S[t] += 1;
+    S.goals.push({ team:t, label: goalMinute() });
+    save(); render();
+  }));
+  document.querySelectorAll('.minus').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.team;
+    if(S[t] <= 0) return;
+    S[t] -= 1;
+    for(let i = S.goals.length - 1; i >= 0; i--){ if(S.goals[i].team === t){ S.goals.splice(i,1); break; } }
+    save(); render();
+  }));
+
+  // ---- instellingen ----
+  const dlg = $('settings');
+  $('openSettings').addEventListener('click', () => {
+    $('opp').value = S.cfg.opponent === 'Tegenstander' ? '' : S.cfg.opponent;
+    $('dur').value = S.cfg.matchMin;
+    $('per').value = S.cfg.periods;
+    $('to').checked = !!S.cfg.timeout;
+    dlg.showModal();
+  });
+  $('saveBtn').addEventListener('click', () => {
+    const dur = parseInt($('dur').value, 10);
+    const per = parseInt($('per').value, 10);
+    S.cfg.opponent = $('opp').value.trim() || 'Tegenstander';
+    if(dur >= 1 && dur <= 120) S.cfg.matchMin = dur;
+    if(per >= 1 && per <= 4 && (S.phase === 'pre' || per >= S.period)) S.cfg.periods = per;
+    S.cfg.timeout = $('to').checked;
+    // instellingen onthouden voor volgende wedstrijden
+    try{ localStorage.setItem(KEY + '-cfg', JSON.stringify(S.cfg)); }catch(e){}
+    save(); dlg.close(); render();
+  });
+  $('resetBtn').addEventListener('click', () => {
+    if(!confirm('Nieuwe wedstrijd? Tijd en stand worden gewist (instellingen blijven).')) return;
+    S.cfg.opponent = $('opp').value.trim() || 'Tegenstander';
+    S = freshMatch(S.cfg);
+    save(); dlg.close(); render();
+  });
+
+  // bij allereerste start: eerder opgeslagen instellingen gebruiken
+  if(S.phase === 'pre' && !localStorage.getItem(KEY)){
+    try{ const c = JSON.parse(localStorage.getItem(KEY + '-cfg')); if(c) S.cfg = Object.assign({}, DEFAULT_CFG, c); }catch(e){}
+  }
+
+  // klok verversen; rekent altijd vanaf tijdstempels, dus loopt door bij scherm uit
+  setInterval(render, 250);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) render(); });
+  window.addEventListener('pageshow', render);
+  render();
+})();
+</script>
+</body>
+</html>
